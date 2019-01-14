@@ -92,6 +92,43 @@ let javadoc loc annots indent =
    | None     -> ""
   )
 
+type atd_scala_wrap = {
+  scala_wrap_t : string;
+  scala_wrap : string;
+  scala_unwrap : string;
+}
+
+
+ let get_scala_wrap loc an =
+  let t =
+    Atd.Annot.get_opt_field
+      ~parse:(fun s -> Some s)
+      ~sections:["scala"]
+      ~field:"t"
+      an
+  in
+  let wrap =
+    Atd.Annot.get_field
+      ~parse:(fun s -> Some (Some s))
+      ~default:t
+      ~sections:["scala"]
+      ~field:"wrap"
+      an
+  in
+  let unwrap =
+    Atd.Annot.get_field
+      ~parse:(fun s -> Some (Some s))
+      ~default:(Option.map (fun s -> s ^ ".unwrap" ) t)
+      ~sections:["scala"]
+      ~field:"unwrap"
+      an
+  in
+  match t, wrap, unwrap with
+      None, None, None -> None
+    | Some t, Some wrap, Some unwrap ->
+        Some { scala_wrap_t = t; scala_wrap = wrap; scala_unwrap = unwrap }
+    | _ ->
+        Error.error loc "Incomplete annotation. Missing t, wrap or unwrap"
 
 (* ------------------------------------------------------------------------- *)
 (* Translation of ATD types into Scala types *)
@@ -227,9 +264,10 @@ and trans_record my_name env (loc, fields, annots) =
   (* Translate field types *)
   let (java_tys, env) = List.fold_left
       (fun (java_tys, env) -> function
-         | `Field (_, (field_name, _, annots), atd_ty) ->
+         | `Field (_, (field_name, ty, annots), atd_ty) ->
              let field_name = get_scala_field_name field_name annots in
              let java_ty = trans_inner env atd_ty in
+             (*let java_ty = Atds_names.to_class_name ty in*)
              ((field_name, java_ty) :: java_tys, env)
       )
       ([], env) fields in
@@ -296,4 +334,9 @@ and trans_inner env atd_ty =
   | Tuple (_, cells, annot) ->
      let cells = List.map (fun (_, ty, _) -> trans_inner env ty) cells in
      sprintf "(%s)" (String.concat ", " cells)
+  | Wrap (loc, t, a) ->
+     (match get_scala_wrap loc a with
+         None -> trans_inner env t
+       | Some { scala_wrap_t ; _ } -> scala_wrap_t
+     )
   | x -> type_not_supported x

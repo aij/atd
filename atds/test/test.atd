@@ -81,3 +81,10 @@ type addr = {
 type a = [ A of b list ]
 type b = [ B ]
 *)
+
+type money = string wrap <scala t="BigDecimal" unwrap="((_:BigDecimal).toString)">
+
+type item = {
+  descr: string;
+  cost: money;
+};
